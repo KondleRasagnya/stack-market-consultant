@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Stock Consultant Agent — Backend-Ready + Price Chart</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .grad { background: radial-gradient(1200px 800px at 20% -10%, #0b1227 0%, #0a0f22 40%, #0a0e1c 100%); }
+    .card { background: linear-gradient(135deg, rgba(255,255,255,.06), rgba(255,255,255,.02)); border: 1px solid rgba(255,255,255,.08); backdrop-filter: blur(8px); }
+    .glow { box-shadow: 0 12px 40px rgba(0,0,0,.26); }
+    .badge { background: linear-gradient(135deg, rgba(99,102,241,.2), rgba(59,130,246,.2)); }
+    .cta { background: linear-gradient(135deg, #6366f1, #22d3ee); color:#0b1022; }
+    .cta:hover { filter: brightness(1.05); }
+    .divider { height:1px; background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent); }
+    .tag { background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.08); }
+    .fade-in { animation: fadeIn .35s ease both; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: translateY(0);} }
+    th, td { vertical-align: middle; }
+    .role-tab-active { background: linear-gradient(135deg, rgba(99,102,241,.25), rgba(34,211,238,.25)); color: #0b1022; }
+    .role-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .noselect { user-select: none; }
+  </style>
+</head>
+<body class="grad text-slate-100 min-h-screen">
+  <div class="max-w-6xl mx-auto px-5 py-8">
+    <!-- Header -->
+    <header class="mb-8">
+      <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
+        <div>
+          <h1 class="text-3xl md:text-4xl font-bold tracking-tight">
+            Stock Consultant Agent
+            <span class="ml-2 align-middle text-xs font-semibold uppercase px-2 py-1 rounded badge">Backend Ready</span>
+          </h1>
+          <p class="text-slate-300 mt-2 max-w-2xl">
+            Enter your portfolio to get simple, actionable advice. Works with a backend if configured, or falls back to mock data for local testing.
+          </p>
+          <p class="text-xs text-slate-400 mt-2">Disclosure: Billing and market data are simulated unless you connect your own endpoints.</p>
+        </div>
+        <div class="flex items-center gap-3">
+          <button id="refreshDataBtn" class="cta font-semibold px-4 py-2 rounded-lg transition-all">
+            Refresh market data
+          </button>
+          <button id="downloadReportBtn" class="bg-emerald-500 hover:bg-emerald-400 text-slate-900 font-semibold px-4 py-2 rounded-lg transition-all">
+            Download latest advice
+          </button>
+          <button id="settingsBtn" class="bg-slate-700 hover:bg-slate-600 text-slate-100 font-semibold px-4 py-2 rounded-lg transition-all">
+            Settings
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- Status & Usage -->
+    <section class="card glow rounded-2xl p-5 mb-8">
+      <div class="grid md:grid-cols-5 gap-4">
+        <div class="rounded-xl p-4 tag">
+          <div class="text-slate-400 text-sm">Mode</div>
+          <div id="modeLabel" class="text-lg font-semibold mt-1">Demo (local)</div>
+        </div>
+        <div class="rounded-xl p-4 tag">
+          <div class="text-slate-400 text-sm">Last data update</div>
+          <div id="lastUpdate" class="text-lg font-semibold mt-1">—</div>
+        </div>
+        <div class="rounded-xl p-4 tag">
+          <div class="text-slate-400 text-sm">Today: Portfolios analyzed</div>
+          <div class="text-lg font-semibold mt-1"><span id="countPortfolios">0</span></div>
+        </div>
+        <div class="rounded-xl p-4 tag">
+          <div class="text-slate-400 text-sm">Today: Advices generated</div>
+          <div class="text-lg font-semibold mt-1"><span id="countAdvice">0</span></div>
+        </div>
+        <div class="rounded-xl p-4 tag">
+          <div class="text-slate-400 text-sm">Estimated cost today</div>
+          <div class="text-lg font-semibold mt-1">₹<span id="costToday">0.00</span></div>
+        </div>
+      </div>
+      <div class="divider my-4"></div>
+      <div class="flex flex-col md:flex-row gap-4 md:items-center md:justify-between">
+        <div class="flex items-center gap-2 text-sm text-slate-300">
+          <span class="px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-200">Billing</span>
+          <span>Per advice: ₹<span id="priceAdviceLabel">1.00</span> • Per portfolio: ₹<span id="pricePortfolioLabel">5.00</span></span>
+        </div>
+        <form id="pricingForm" class="flex items-center gap-3" autocomplete="off">
+          <label class="text-sm text-slate-300">Set prices</label>
+          <input type="number" min="0" step="0.01" id="priceAdvice" class="bg-slate-900/70 border border-slate-700 rounded-lg px-3 py-2 w-28 text-right" placeholder="Advice ₹" value="1.00" />
+          <input type="number" min="0" step="0.01" id="pricePortfolio" class="bg-slate-900/70 border border-slate-700 rounded-lg px-3 py-2 w-32 text-right" placeholder="Portfolio ₹" value="5.00" />
+          <button class="bg-slate-200 text-slate-900 px-3 py-2 rounded-lg font-medium">Update</button>
+        </form>
+      </div>
+      <div class="text-xs text-slate-400 mt-3">
+        Flexprice hint: charges for each portfolio analyzed and for each line of advice generated. Connect your billing endpoint in Settings to record events server-side.
+      </div>
+    </section>
+
+    <!-- Portfolio + Advice -->
+    <section class="grid lg:grid-cols-3 gap-6">
+      <div class="lg:col-span-2 card glow rounded-2xl p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xl font-semibold">Your Portfolio</h2>
+          <div class="flex gap-2">
+            <button id="addRowBtn" class="bg-slate-200 text-slate-900 px-3 py-2 rounded-lg font-medium">Add stock</button>
+            <button id="loadSampleBtn" class="bg-sky-400 text-slate-900 px-3 py-2 rounded-lg font-medium">Load sample</button>
+            <button id="clearPortfolioBtn" class="bg-slate-700 hover:bg-slate-600 text-slate-100 px-3 py-2 rounded-lg font-medium">Clear</button>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-separate" style="border-spacing: 0 10px;">
+            <thead>
+              <tr class="text-slate-300 text-sm">
+                <th class="px-4 py-2">Symbol</th>
+                <th class="px-4 py-2">Quantity</th>
+                <th class="px-4 py-2">Avg Buy Price</th>
+                <th class="px-4 py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="portfolioBody"></tbody>
+          </table>
+        </div>
+        <div class="divider my-4"></div>
+        <div class="flex items-center justify-between">
+          <div class="text-slate-300 text-sm">Tip: Use official symbols like TCS, INFY, HDFCBANK</div>
+          <button id="analyzeBtn" class="cta font-semibold px-5 py-2.5 rounded-lg transition-all">Analyze Portfolio</button>
+        </div>
+      </div>
+
+      <!-- Advice Panel -->
+      <aside class="card glow rounded-2xl p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xl font-semibold">Advice</h2>
+        <span id="adviceCountBadge" class="text-xs px-2 py-1 rounded badge">0 items</span>
+        </div>
+        <div id="adviceList" class="space-y-3"></div>
+        <div id="adviceEmpty" class="text-slate-400 text-sm">
+          No advice yet. Click “Analyze Portfolio” to generate suggestions.
+        </div>
+      </aside>
+    </section>
+
+    <!-- Market Snapshot -->
+    <section class="mt-8 card glow rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xl font-semibold">Market snapshot</h2>
+        <span id="dataSourceLabel" class="text-xs text-slate-400">Source: Mock CSV (local)</span>
+      </div>
+      <div id="marketGrid" class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+    </section>
+
+    <!-- Price Chart -->
+    <section class="mt-8 card glow rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xl font-semibold">Price Chart</h2>
+        <div id="legend" class="text-sm text-slate-300">
+          <span class="mr-3">Last: <span id="legendLast" class="font-semibold text-slate-100">—</span></span>
+          <span>Change: <span id="legendChg" class="font-semibold">—</span></span>
+        </div>
+      </div>
+      <div class="grid md:grid-cols-4 gap-4 mb-4">
+        <div class="space-y-2">
+          <label class="block text-sm text-slate-300">Symbol</label>
+          <select id="chartSymbol" class="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-3 py-2">
+            <option value="">—</option>
+          </select>
+        </div>
+        <div class="space-y-2">
+          <label class="block text-sm text-slate-300">Time range</label>
+          <div class="flex flex-wrap gap-2">
+            <button data-range="1W" class="rangeBtn bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg text-sm">1W</button>
+            <button data-range="1M" class="rangeBtn bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg text-sm">1M</button>
+            <button data-range="6M" class="rangeBtn bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg text-sm">6M</button>
+            <button data-range="1Y" class="rangeBtn bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg text-sm">1Y</button>
+            <button data-range="MAX" class="rangeBtn bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg text-sm">MAX</button>
+          </div>
+        </div>
+        <div class="space-y-2">
+          <label class="block text-sm text-slate-300">Smoothing</label>
+          <input id="smoothing" type="range" min="0" max="0.6" step="0.05" value="0.25" class="w-full accent-indigo-400"/>
+          <div class="text-xs text-slate-400">Higher = smoother line</div>
+        </div>
+        <div class="space-y-2">
+          <label class="block text-sm text-slate-300">Upload CSV (optional)</label>
+          <input id="csvInput" type="file" accept=".csv" class="block w-full text-sm text-slate-200 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-slate-900 file:bg-slate-200 hover:file:bg-slate-100">
+          <div class="text-xs text-slate-400">Format: symbol,timestamp,price</div>
+        </div>
+      </div>
+      <div class="relative w-full" style="aspect-ratio: 16 / 9;">
+        <svg id="chart" class="absolute inset-0 w-full h-full noselect"></svg>
+        <div id="tooltip" class="hidden absolute bg-slate-900/90 border border-slate-700 text-slate-100 text-xs px-3 py-2 rounded-lg shadow-xl pointer-events-none"></div>
+      </div>
+      <div class="mt-3 text-xs text-slate-400">Tip: Hover to inspect. Drag horizontally to zoom. Click a range to reset.</div>
+    </section>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center p-4 z-50">
+      <div class="card glow rounded-2xl w-full max-w-2xl p-6">
+        <div class="flex items-start justify-between">
+          <div>
+            <h3 class="text-xl font-semibold">Settings</h3>
+            <p class="text-slate-400 text-sm mt-1">Connect your backend to power live data, advice, and billing.</p>
+          </div>
+          <button id="closeSettings" class="bg-slate-700 hover:bg-slate-600 text-slate-100 px-3 py-1.5 rounded-lg">Close</button>
+        </div>
+        <div class="divider my-4"></div>
+        <form id="settingsForm" class="space-y-4" autocomplete="off">
+          <div class="flex items-center justify-between">
+            <label class="flex items-center gap-3">
+              <input id="backendEnabled" type="checkbox" class="w-5 h-5">
+              <span class="font-medium">Enable Backend Mode</span>
+            </label>
+            <span class="text-xs text-slate-400">When on, calls your API instead of local demo.</span>
+          </div>
+          <div>
+            <label class="block text-sm text-slate-300 mb-1">Base API URL</label>
+            <input id="apiBaseUrl" type="url" placeholder="https://api.example.com"
+                   class="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-3 py-2" />
+          </div>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm text-slate-300 mb-1">Market endpoint (GET)</label>
+              <input id="endpointMarket" type="text" placeholder="/market"
+                     class="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-3 py-2" />
+              <p class="text-xs text-slate-400 mt-1">Expected: array of {symbol,name,sector,price,change,volatility,pe,marketcap}</p>
+            </div>
+            <div>
+              <label class="block text-sm text-slate-300 mb-1">Analyze endpoint (POST)</label>
+              <input id="endpointAnalyze" type="text" placeholder="/analyze"
+                     class="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-3 py-2" />
+              <p class="text-xs text-slate-400 mt-1">Body: { portfolio:[{symbol,qty,avg}] } • Returns: { advices:[], summary:[] }</p>
+            </div>
+          </div>
+          <div class="grid md:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm text-slate-300 mb-1">Usage event endpoint (POST)</label>
+              <input id="endpointUsage" type="text" placeholder="/usage"
+                     class="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-3 py-2" />
+              <p class="text-xs text-slate-400 mt-1">Body: { type:'portfolio'|'advice', count:number, amount:number }</p>
+            </div>
+            <div>
+              <label class="block text-sm text-slate-300 mb-1">Ping endpoint (GET)</label>
+              <input id="endpointPing" type="text" placeholder="/health"
+                     class="w-full bg-slate-900/70 border border-slate-700 rounded-lg px-3 py-2" />
+              <p class="text-xs text-slate-400 mt-1">Expected: { ok:true }</p>
+            </div>
+          </div>
+          <div class="flex items-center justify-between gap-3">
+            <button class="bg-slate-200 text-slate-900 px-4 py-2 rounded-lg font-semibold">Save</button>
+            <div class="flex items-center gap-2">
+              <button id="pingBtn" class="bg-indigo-400 hover:bg-indigo-300 text-slate-900 px-3 py-2 rounded-lg font-semibold">Ping backend</button>
+              <span id="pingStatus" class="text-sm text-slate-300"></span>
+            </div>
+          </div>
+        </form>
+        <div class="divider my-4"></div>
+        <div class="text-xs text-slate-400">
+          Pathway tip: You can expose your Pathway pipeline as a simple REST layer that streams updated CSV or JSON. Point “Market endpoint” to that URL.
+        </div>
+      </div>
+    </div>
+
+    <!-- Hidden CSV (mock Pathway) -->
+    <textarea id="mockCsv" class="hidden">
+symbol,name,sector,price,change,volatility,pe,marketcap
+TCS,Tata Consultancy Services,IT,3980,-0.6,Low,30,15.2T
+INFY,Infosys,IT,1550,0.4,Medium,28,6.4T
+WIPRO,Wipro,IT,465,-0.3,Medium,23,2.4T
+HDFCBANK,HDFC Bank,Financials,1555,0.7,Low,20,11.6T
+RELIANCE,Reliance Industries,Energy,2945,-0.2,Low,27,20.1T
+ITC,ITC,Consumer,450,0.2,Low,28,5.6T
+TATAMOTORS,Tata Motors,Auto,1025,1.1,High,32,3.6T
+HINDUNILVR,Hindustan Unilever,Consumer,2480,-0.5,Low,55,5.8T
+SBIN,State Bank of India,Financials,720,0.9,Medium,14,6.4T
+    </textarea>
+  </div>
+
+  <script>
+    // -------------------------------
+    // Config / Usage
+    // -------------------------------
+    const CFG_KEY = 'stock_agent_cfg_v1';
+    const USAGE_KEY = 'stock_agent_usage_v2';
+    const defaultConfig = {
+      backendEnabled: false,
+      apiBaseUrl: '',
+      endpoints: { market: '/market', analyze: '/analyze', usage: '/usage', ping: '/health' },
+    };
+    const defaultPrices = { perAdvice: 1.00, perPortfolio: 5.00 };
+
+    function loadCfg() {
+      try {
+        const v = JSON.parse(localStorage.getItem(CFG_KEY));
+        return { ...defaultConfig, ...(v||{}), endpoints: { ...defaultConfig.endpoints, ...((v||{}).endpoints||{}) } };
+      } catch { return structuredClone(defaultConfig); }
+    }
+    function saveCfg(cfg) { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); renderMode(cfg); }
+    const todayKey = () => new Date().toISOString().slice(0,10);
+    function loadUsage() {
+      const raw = localStorage.getItem(USAGE_KEY);
+      let data = { date: todayKey(), portfolios: 0, advices: 0, prices: defaultPrices };
+      if (raw) { try { const parsed = JSON.parse(raw); if (parsed.date === todayKey()) data = parsed; } catch {} }
+      return data;
+    }
+    function saveUsage(u) { localStorage.setItem(USAGE_KEY, JSON.stringify(u)); renderUsage(u); }
+
+    // -------------------------------
+    // Elements
+    // -------------------------------
+    const els = {
+      // header
+      refreshDataBtn: document.getElementById('refreshDataBtn'),
+      downloadReportBtn: document.getElementById('downloadReportBtn'),
+      settingsBtn: document.getElementById('settingsBtn'),
+      // status
+      modeLabel: document.getElementById('modeLabel'),
+      lastUpdate: document.getElementById('lastUpdate'),
+      countPortfolios: document.getElementById('countPortfolios'),
+      countAdvice: document.getElementById('countAdvice'),
+      costToday: document.getElementById('costToday'),
+      priceAdvice: document.getElementById('priceAdvice'),
+      pricePortfolio: document.getElementById('pricePortfolio'),
+      priceAdviceLabel: document.getElementById('priceAdviceLabel'),
+      pricePortfolioLabel: document.getElementById('pricePortfolioLabel'),
+      pricingForm: document.getElementById('pricingForm'),
+      // portfolio
+      portfolioBody: document.getElementById('portfolioBody'),
+      addRowBtn: document.getElementById('addRowBtn'),
+      loadSampleBtn: document.getElementById('loadSampleBtn'),
+      clearPortfolioBtn: document.getElementById('clearPortfolioBtn'),
+      analyzeBtn: document.getElementById('analyzeBtn'),
+      // advice
+      adviceList: document.getElementById('adviceList'),
+      adviceEmpty: document.getElementById('adviceEmpty'),
+      adviceCountBadge: document.getElementById('adviceCountBadge'),
+      // market
+      marketGrid: document.getElementById('marketGrid'),
+      mockCsv: document.getElementById('mockCsv'),
+      dataSourceLabel: document.getElementById('dataSourceLabel'),
+      // settings modal
+      settingsModal: document.getElementById('settingsModal'),
+      closeSettings: document.getElementById('closeSettings'),
+      settingsForm: document.getElementById('settingsForm'),
+      backendEnabled: document.getElementById('backendEnabled'),
+      apiBaseUrl: document.getElementById('apiBaseUrl'),
+      endpointMarket: document.getElementById('endpointMarket'),
+      endpointAnalyze: document.getElementById('endpointAnalyze'),
+      endpointUsage: document.getElementById('endpointUsage'),
+      endpointPing: document.getElementById('endpointPing'),
+      pingBtn: document.getElementById('pingBtn'),
+      pingStatus: document.getElementById('pingStatus'),
+      // chart UI
+      chartSymbol: document.getElementById('chartSymbol'),
+      rangeBtns: () => Array.from(document.querySelectorAll('.rangeBtn')),
+      smoothing: document.getElementById('smoothing'),
+      csvInput: document.getElementById('csvInput'),
+      chart: document.getElementById('chart'),
+      tooltip: document.getElementById('tooltip'),
+      legendLast: document.getElementById('legendLast'),
+      legendChg: document.getElementById('legendChg'),
+    };
+
+    // -------------------------------
+    // State
+    // -------------------------------
+    let cfg = loadCfg();
+    let usage = loadUsage();
+    let market = []; // {symbol,name,sector,price,change,volatility,pe,marketcap}
+    let latestAdvicePlainText = '';
+    let chartSeries = {}; // { [symbol]: [{ t: Date, p: number }, ...] }
+    let chartSymbol = '';
+    let fullDomain = null;
+    let viewDomain = null;
+    let currentRange = '1M';
+
+    // -------------------------------
+    // Renderers
+    // -------------------------------
+    function renderMode(cfg) {
+      els.modeLabel.textContent = cfg.backendEnabled ? 'Backend Mode' : 'Demo (local)';
+      els.dataSourceLabel.textContent = cfg.backendEnabled ? 'Source: Backend' : 'Source: Mock CSV (local)';
+    }
+    function renderUsage(u) {
+      els.countPortfolios.textContent = u.portfolios;
+      els.countAdvice.textContent = u.advices;
+      els.costToday.textContent = (u.portfolios * u.prices.perPortfolio + u.advices * u.prices.perAdvice).toFixed(2);
+      els.priceAdvice.value = u.prices.perAdvice.toFixed(2);
+      els.pricePortfolio.value = u.prices.perPortfolio.toFixed(2);
+      els.priceAdviceLabel.textContent = u.prices.perAdvice.toFixed(2);
+      els.pricePortfolioLabel.textContent = u.prices.perPortfolio.toFixed(2);
+    }
+    renderMode(cfg);
+    renderUsage(usage);
+
+    function setLastUpdateNow() { els.lastUpdate.textContent = new Date().toLocaleString(); }
+
+    // -------------------------------
+    // Helpers
+    // -------------------------------
+    function parseCSV(text) {
+      const lines = text.trim().split(/\r?\n/);
+      const headers = lines[0].split(',').map(h => h.trim());
+      return lines.slice(1).map(line => {
+        const cols = line.split(',').map(c => c.trim());
+        const obj = {};
+        headers.forEach((h,i) => obj[h] = cols[i]);
+        obj.price = Number(obj.price);
+        obj.change = Number(obj.change);
+        obj.pe = Number(obj.pe);
+        return obj;
+      });
+    }
+    function randomizeMarket(base) {
+      return base.map(s => {
+        const jitter = (Math.random() - 0.5) * 0.02;
+        const newPrice = Math.max(1, +(s.price * (1 + jitter)).toFixed(2));
+        const newChange = +(jitter * 100).toFixed(2);
+        return { ...s, price: newPrice, change: newChange };
+      });
+    }
+    function toast(msg) {
+      const t = document.createElement('div');
+      t.className = 'fixed bottom-4 left-1/2 -translate-x-1/2 bg-slate-900/90 border border-slate-700 text-slate-100 px-4 py-2 rounded-lg shadow-xl fade-in z-50';
+      t.textContent = msg; document.body.appendChild(t); setTimeout(()=> t.remove(), 2600);
+    }
+    function bumpAdviceUsage(count) {
+      usage.advices += count;
+      saveUsage(usage);
+      if (cfg.backendEnabled) {
+        const adviceAmt = count * usage.prices.perAdvice;
+        postUsage('advice', count, adviceAmt);
+      }
+    }
+
+    // -------------------------------
+    // Advice engine (local fallback)
+    // -------------------------------
+    function firstStrong(arr) {
+      const order = ['risk is high', 'down over 10%', 'up nicely', 'strong today', 'weak today', 'moderate risk', 'low risk', 'reasonable valuation', 'expensive'];
+      for (const key of order) { const hit = arr.find(n => n.includes(key)); if (hit) return hit; }
+      return arr[0] || '';
+    }
+    function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+    function formatList(arr) {
+      if (arr.length === 1) return arr[0];
+      if (arr.length === 2) return `${arr[0]} and ${arr[1]}`;
+      return `${arr.slice(0, -1).join(', ')}, and ${arr[arr.length - 1]}`;
+    }
+    function localAdviceEngine(portfolio, market) {
+      const bySymbol = {}; market.forEach(s => { bySymbol[s.symbol] = s; });
+      let advices = [], summary = [], totalValue = 0, sectorValue = {}, holdings = [];
+      portfolio.forEach(p => {
+        const m = bySymbol[p.symbol];
+        if (!m) { advices.push(`Unknown symbol ${p.symbol} — consider replacing with a tracked stock.`); return; }
+        const value = p.qty * m.price; totalValue += value; sectorValue[m.sector] = (sectorValue[m.sector] || 0) + value;
+        const pnlPct = p.avg > 0 ? ((m.price - p.avg) / p.avg) * 100 : 0;
+        holdings.push({ ...p, market: m, pnlPct });
+      });
+      holdings.forEach(h => {
+        const m = h.market; const notes = [];
+        if (m.volatility === 'High') notes.push('risk is high — consider reducing');
+        else if (m.volatility === 'Medium') notes.push('moderate risk — avoid overexposure');
+        else notes.push('low risk — steady');
+        if (h.pnlPct <= -10) notes.push('down over 10% vs buy — consider trimming or switching');
+        else if (h.pnlPct >= 15) notes.push('up nicely — consider taking partial profits');
+        if (m.change <= -1) notes.push('weak today — wait before adding');
+        else if (m.change >= 1) notes.push('strong today — avoid chasing');
+        if (m.pe >= 40) notes.push('expensive vs peers');
+        else if (m.pe <= 15) notes.push('reasonable valuation');
+        const line = (h.pnlPct <= -10 || m.volatility === 'High' || h.pnlPct >= 15)
+          ? `You hold ${h.symbol}. ${capitalize(firstStrong(notes))}.`
+          : `You hold ${h.symbol}. ${capitalize(notes[0])}.`;
+        advices.push(line);
+      });
+      const sectorsHeld = Object.keys(sectorValue);
+      const universeSectors = Array.from(new Set(market.map(s => s.sector)));
+      const missing = universeSectors.filter(sec => !sectorsHeld.includes(sec));
+      if (missing.length > 0) {
+        const picks = missing.slice(0, 2).map(sec => {
+          const candidates = market.filter(s => s.sector === sec).sort((a,b) => a.pe - b.pe);
+          return candidates[0]?.symbol || sec;
+        }).filter(Boolean);
+        if (picks.length) advices.push(`Your portfolio lacks ${formatList(missing)} — consider adding ${formatList(picks)} for balance.`);
+      }
+      if (totalValue > 0) {
+        Object.entries(sectorValue).forEach(([sec, val]) => {
+          const pct = Math.round((val / totalValue) * 100);
+          if (pct >= 40) advices.push(`Heavy exposure in ${sec} (${pct}%) — consider reducing.`);
+        });
+      }
+      summary.push(portfolio.length ? 'Advice based on holdings, recent moves, and simple risk/valuation signals.' : 'No holdings entered — add stocks to receive advice.');
+      return { advices, summary };
+    }
+
+    function showAdvice({ advices, summary }) {
+      els.adviceList.innerHTML = '';
+      const count = (advices?.length || 0) + (summary?.length || 0);
+      els.adviceCountBadge.textContent = `${count} item${count === 1 ? '' : 's'}`;
+      if (!count) { els.adviceEmpty.classList.remove('hidden'); return; }
+      els.adviceEmpty.classList.add('hidden');
+      const addItem = (text, kind='tip') => {
+        const row = document.createElement('div');
+        row.className = 'rounded-xl p-4 tag fade-in';
+        row.innerHTML = `<div class="flex items-start gap-3"><div class="text-xl">💡</div><div class="flex-1 text-slate-100">${text}</div></div>`;
+        els.adviceList.appendChild(row);
+      };
+      (summary||[]).forEach(s => addItem(s,'summary'));
+      (advices||[]).forEach(a => addItem(a,'tip'));
+      bumpAdviceUsage(count);
+      const now = new Date().toLocaleString();
+      latestAdvicePlainText = [
+        `Stock Consultant Agent — Advice Report`,
+        `Generated: ${now}`,
+        ``,
+        `Summary:`,
+        ...summary.map(s => `- ${s}`),
+        ``,
+        `Advice:`,
+        ...advices.map(a => `- ${a}`),
+        ``
+      ].join('\n');
+    }
+
+    // -------------------------------
+    // Networking (Backend Mode)
+    // -------------------------------
+    function buildUrl(base, path) {
+      if (!base) return '';
+      if (!path) return base;
+      try { return new URL(path, base.endsWith('/') ? base : base + '/').toString(); } catch { return ''; }
+    }
+    async function safeFetch(url, opts={}, timeoutMs=10000) {
+      const ctrl = new AbortController(); const t = setTimeout(() => ctrl.abort(), timeoutMs);
+      try { const res = await fetch(url, { ...opts, signal: ctrl.signal }); clearTimeout(t); return res; }
+      catch (e) { clearTimeout(t); throw e; }
+    }
+    async function fetchMarketBackend() {
+      const url = buildUrl(cfg.apiBaseUrl, cfg.endpoints.market);
+      if (!url) throw new Error('Invalid market endpoint');
+      const res = await safeFetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!res.ok) throw new Error(`Market fetch failed (${res.status})`);
+      return await res.json();
+    }
+    async function analyzeBackend(portfolio) {
+      const url = buildUrl(cfg.apiBaseUrl, cfg.endpoints.analyze);
+      if (!url) throw new Error('Invalid analyze endpoint');
+      const res = await safeFetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ portfolio })
+      });
+      if (!res.ok) throw new Error(`Analyze failed (${res.status})`);
+      return await res.json();
+    }
+    async function postUsage(type, count, amount) {
+      const url = buildUrl(cfg.apiBaseUrl, cfg.endpoints.usage);
+      if (!url) return;
+      try {
+        await safeFetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ type, count, amount })
+        });
+      } catch {}
+    }
+    async function pingBackend() {
+      const url = buildUrl(cfg.apiBaseUrl, cfg.endpoints.ping);
+      if (!url) throw new Error('Invalid ping endpoint');
+      const res = await safeFetch(url, { headers: { 'Accept': 'application/json' } }, 5000);
+      if (!res.ok) throw new Error(`Ping failed (${res.status})`);
+      const data = await res.json().catch(()=>({ ok:false }));
+      return data;
+    }
+
+    // -------------------------------
+    // Market rendering
+    // -------------------------------
+    function renderMarketGrid(list) {
+      els.marketGrid.innerHTML = '';
+      list.forEach(s => {
+        const color = s.change >= 0 ? 'text-emerald-300' : 'text-rose-300';
+        const chip = s.volatility === 'High' ? 'bg-rose-500/15 text-rose-300' : s.volatility === 'Medium' ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-200';
+        const card = document.createElement('div');
+        card.className = 'rounded-xl p-4 tag fade-in';
+        card.innerHTML = `
+          <div class="flex items-start justify-between">
+            <div>
+              <div class="text-sm text-slate-400">${s.name}</div>
+              <div class="font-semibold tracking-wide">${s.symbol}</div>
+            </div>
+            <span class="text-xs px-2 py-1 rounded ${chip}">${s.volatility} risk</span>
+          </div>
+          <div class="mt-3 flex items-end justify-between">
+            <div>
+              <div class="text-2xl font-bold">₹${Number(s.price).toLocaleString()}</div>
+              <div class="${color} text-sm">${Number(s.change) >= 0 ? '+' : ''}${Number(s.change).toFixed(2)}% today</div>
+            </div>
+            <div class="text-right text-slate-400 text-sm">
+              <div>${s.sector}</div>
+              <div>P/E ${Number(s.pe)}</div>
+              <div class="text-slate-500">${s.marketcap}</div>
+            </div>
+          </div>
+        `;
+        els.marketGrid.appendChild(card);
+      });
+      // Also refresh chart symbol dropdown
+      populateChartSymbols(list);
+    }
+
+    // -------------------------------
+    // Price Chart logic
+    // -------------------------------
+    function populateChartSymbols(list) {
+      const prev = els.chartSymbol.value;
+      const symbols = Array.from(new Set(list.map(s => s.symbol)));
+      els.chartSymbol.innerHTML = '<option value="">—</option>' + symbols.map(s => `<option value="${s}">${s}</option>`).join('');
+      // Keep previous selection if still valid, else pick first.
+      if (prev && symbols.includes(prev)) {
+        els.chartSymbol.value = prev;
+      } else if (symbols.length) {
+        els.chartSymbol.value = symbols[0];
+      }
+      chartSymbol = els.chartSymbol.value || '';
+      if (chartSymbol) ensureSeriesFor(chartSymbol);
+      computeDomains();
+      drawChart();
+    }
+
+    function ensureSeriesFor(symbol) {
+      if (chartSeries[symbol]?.length) return;
+      // Build a synthetic 1-year daily series from current price
+      const m = market.find(x => x.symbol === symbol);
+      const base = m ? Number(m.price) : 1000;
+      const volTag = (m?.volatility || 'Low').toLowerCase();
+      const vol = volTag === 'high' ? 0.025 : volTag === 'medium' ? 0.012 : 0.006;
+      const days = 365;
+      const arr = [];
+      let price = base;
+      for (let i = days; i >= 0; i--) {
+        const d = new Date(); d.setDate(d.getDate() - i);
+        // random walk drift
+        const drift = (Math.random() - 0.5) * vol;
+        price = Math.max(1, +(price * (1 + drift)).toFixed(2));
+        arr.push({ t: new Date(d.toISOString().slice(0,10)), p: price });
+      }
+      chartSeries[symbol] = arr;
+      fullDomain = null; // force recompute
+    }
+
+    function computeDomains() {
+      if (!chartSymbol || !chartSeries[chartSymbol]?.length) { fullDomain = viewDomain = null; return; }
+      const arr = chartSeries[chartSymbol];
+      const tMin = arr[0].t.getTime();
+      const tMax = arr[arr.length-1].t.getTime();
+      fullDomain = [tMin, tMax];
+      viewDomain = rangeToDomain(currentRange, fullDomain);
+    }
+
+    function rangeToDomain(range, full) {
+      const [minT, maxT] = full;
+      if (range === 'MAX') return [minT, maxT];
+      const msDay = 24*60*60*1000;
+      const map = { '1W': 7, '1M': 30, '6M': 182, '1Y': 365 };
+      const days = map[range] || 30;
+      return [Math.max(minT, maxT - days*msDay), maxT];
+    }
+
+    function drawChart() {
+      const svg = els.chart;
+      svg.innerHTML = '';
+      if (!chartSymbol || !chartSeries[chartSymbol]?.length || !viewDomain) return;
+      const data = chartSeries[chartSymbol].filter(d => d.t.getTime() >= viewDomain[0] && d.t.getTime() <= viewDomain[1]);
+      if (!data.length) return;
+
+      const times = data.map(d=>d.t.getTime());
+      const prices = data.map(d=>d.p);
+      const tMin = Math.min(...times), tMax = Math.max(...times);
+      const pMin = Math.min(...prices), pMax = Math.max(...prices);
+      const padY = (pMax - pMin) * 0.1 || 1;
+      const yMin = pMin - padY, yMax = pMax + padY;
+
+      const W = svg.clientWidth || 800;
+      const H = svg.clientHeight || 400;
+      const m = { top: 20, right: 20, bottom: 36, left: 56 };
+      const iw = W - m.left - m.right;
+      const ih = H - m.top - m.bottom;
+      svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+      const x = (t) => m.left + ((t - tMin) / (tMax - tMin || 1)) * iw;
+      const y = (p) => m.top + (1 - ((p - yMin) / (yMax - yMin || 1))) * ih;
+
+      const NS = 'http://www.w3.org/2000/svg';
+      const g = document.createElementNS(NS, 'g'); svg.appendChild(g);
+
+      // Axes grid
+      for (let i=0;i<=5;i++){
+        const t = tMin + (i/5)*(tMax-tMin);
+        const gx = x(t);
+        const line = document.createElementNS(NS, 'line');
+        line.setAttribute('x1', gx); line.setAttribute('x2', gx);
+        line.setAttribute('y1', m.top); line.setAttribute('y2', H - m.bottom);
+        line.setAttribute('stroke', 'rgba(148,163,184,.2)');
+        g.appendChild(line);
+
+        const txt = document.createElementNS(NS, 'text');
+        txt.setAttribute('x', gx); txt.setAttribute('y', H - 12);
+        txt.setAttribute('fill', 'rgba(226,232,240,.8)');
+        txt.setAttribute('font-size', '11');
+        txt.setAttribute('text-anchor', 'middle');
+        txt.textContent = new Date(t).toLocaleDateString();
+        g.appendChild(txt);
+      }
+      for (let i=0;i<=4;i++){
+        const p = yMin + (i/4)*(yMax - yMin);
+        const gy = y(p);
+        const line = document.createElementNS(NS, 'line');
+        line.setAttribute('x1', m.left); line.setAttribute('x2', W - m.right);
+        line.setAttribute('y1', gy); line.setAttribute('y2', gy);
+        line.setAttribute('stroke', 'rgba(148,163,184,.2)');
+        g.appendChild(line);
+
+        const txt = document.createElementNS(NS, 'text');
+        txt.setAttribute('x', m.left - 8); txt.setAttribute('y', gy + 4);
+        txt.setAttribute('fill', 'rgba(226,232,240,.8)');
+        txt.setAttribute('font-size', '11');
+        txt.setAttribute('text-anchor', 'end');
+        txt.textContent = `₹${p.toFixed(0)}`;
+        g.appendChild(txt);
+      }
+
+      // Path
+      const pts = data.map(d => [x(d.t.getTime()), y(d.p)]);
+      const s = Number(els.smoothing.value || 0.25);
+      const dPath = smoothPath(pts, s);
+
+      const defs = document.createElementNS(NS, 'defs');
+      const lg = document.createElementNS(NS, 'linearGradient');
+      lg.setAttribute('id', 'lineGrad'); lg.setAttribute('x1', '0'); lg.setAttribute('x2', '0'); lg.setAttribute('y1', '0'); lg.setAttribute('y2', '1');
+      const s1 = document.createElementNS(NS, 'stop'); s1.setAttribute('offset', '0%'); s1.setAttribute('stop-color', 'rgba(56,189,248,0.9)');
+      const s2 = document.createElementNS(NS, 'stop'); s2.setAttribute('offset', '100%'); s2.setAttribute('stop-color', 'rgba(99,102,241,0.9)');
+      lg.appendChild(s1); lg.appendChild(s2);
+
+      const ag = document.createElementNS(NS, 'linearGradient');
+      ag.setAttribute('id', 'areaGrad'); ag.setAttribute('x1', '0'); ag.setAttribute('x2', '0'); ag.setAttribute('y1', '0'); ag.setAttribute('y2', '1');
+      const a1 = document.createElementNS(NS, 'stop'); a1.setAttribute('offset', '0%'); a1.setAttribute('stop-color', 'rgba(56,189,248,0.25)');
+      const a2 = document.createElementNS(NS, 'stop'); a2.setAttribute('offset', '100%'); a2.setAttribute('stop-color', 'rgba(99,102,241,0)');
+      ag.appendChild(a1); ag.appendChild(a2);
+      defs.appendChild(lg); defs.appendChild(ag);
+      svg.appendChild(defs);
+
+      const area = document.createElementNS(NS, 'path');
+      const baseY = H - m.bottom;
+      area.setAttribute('d', `${dPath} L ${pts[pts.length-1][0]} ${baseY} L ${pts[0][0]} ${baseY} Z`);
+      area.setAttribute('fill', 'url(#areaGrad)'); area.setAttribute('opacity', '0.9');
+      g.appendChild(area);
+
+      const path = document.createElementNS(NS, 'path');
+      path.setAttribute('d', dPath); path.setAttribute('fill', 'none');
+      path.setAttribute('stroke', 'url(#lineGrad)'); path.setAttribute('stroke-width', '2.5'); path.setAttribute('opacity', '0.95');
+      g.appendChild(path);
+
+      // Hover
+      const hoverLine = document.createElementNS(NS, 'line');
+      hoverLine.setAttribute('y1', m.top); hoverLine.setAttribute('y2', H - m.bottom);
+      hoverLine.setAttribute('stroke', 'rgba(226,232,240,.35)'); hoverLine.setAttribute('stroke-dasharray', '4 4');
+      hoverLine.style.display = 'none'; g.appendChild(hoverLine);
+
+      const hoverDot = document.createElementNS(NS, 'circle');
+      hoverDot.setAttribute('r', '4.5'); hoverDot.setAttribute('fill', '#22d3ee');
+      hoverDot.setAttribute('stroke', '#93c5fd'); hoverDot.setAttribute('stroke-width', '2');
+      hoverDot.style.display = 'none'; g.appendChild(hoverDot);
+
+      // Legend
+      const last = data[data.length-1]?.p ?? null;
+      const first = data[0]?.p ?? null;
+      const chg = last && first ? ((last-first)/first)*100 : 0;
+      els.legendLast.textContent = last ? `₹${last.toFixed(2)}` : '—';
+      els.legendChg.textContent = last ? `${chg>=0?'+':''}${chg.toFixed(2)}%` : '—';
+      els.legendChg.className = chg >= 0 ? 'font-semibold text-emerald-300' : 'font-semibold text-rose-300';
+
+      // Interactions
+      const bbox = svg.getBoundingClientRect();
+      let dragStartX = null;
+
+      svg.onmousemove = (e) => {
+        const rect = svg.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const t = tMin + ((mx - m.left) / (W - m.left - m.right)) * (tMax - tMin);
+        const idx = nearestIndexByTime(data, t);
+        const d = data[idx];
+        const cx = x(d.t.getTime()), cy = y(d.p);
+        hoverLine.setAttribute('x1', cx); hoverLine.setAttribute('x2', cx); hoverLine.style.display = 'block';
+        hoverDot.setAttribute('cx', cx); hoverDot.setAttribute('cy', cy); hoverDot.style.display = 'block';
+        els.tooltip.classList.remove('hidden');
+        els.tooltip.textContent = `${d.t.toLocaleDateString()} • ₹${d.p.toFixed(2)}`;
+        const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+        const tx = clamp(e.clientX - bbox.left + 12, 8, bbox.width - 140);
+        const ty = clamp(e.clientY - bbox.top - 36, 8, bbox.height - 32);
+        els.tooltip.style.left = `${tx}px`; els.tooltip.style.top = `${ty}px`;
+      };
+      svg.onmouseleave = () => { hoverLine.style.display = 'none'; hoverDot.style.display = 'none'; els.tooltip.classList.add('hidden'); };
+      svg.onmousedown = (e) => {
+        const rect = svg.getBoundingClientRect();
+        dragStartX = Math.min(Math.max(e.clientX - rect.left, m.left), W - m.right);
+      };
+      window.onmouseup = (e) => {
+        if (dragStartX === null) return;
+        const rect = svg.getBoundingClientRect();
+        const dragEndX = Math.min(Math.max(e.clientX - rect.left, m.left), W - m.right);
+        const a = Math.min(dragStartX, dragEndX), b = Math.max(dragStartX, dragEndX);
+        dragStartX = null;
+        if (b - a < 10) return;
+        const newMinT = tMin + ((a - m.left) / (W - m.left - m.right)) * (tMax - tMin);
+        const newMaxT = tMin + ((b - m.left) / (W - m.left - m.right)) * (tMax - tMin);
+        viewDomain = [newMinT, newMaxT];
+        currentRange = 'CUSTOM';
+        drawChart();
+      };
+    }
+
+    function nearestIndexByTime(arr, t) {
+      let lo = 0, hi = arr.length-1;
+      while (hi - lo > 1) {
+        const mid = (lo + hi) >> 1;
+        if (arr[mid].t.getTime() < t) lo = mid; else hi = mid;
+      }
+      return (t - arr[lo].t.getTime() < arr[hi].t.getTime() - t) ? lo : hi;
+    }
+
+    function smoothPath(points, alpha = 0.25) {
+      if (points.length <= 2 || alpha <= 0) return 'M ' + points.map(p => p.join(' ')).join(' L ');
+      const d = [];
+      d.push('M', points[0][0], points[0][1]);
+      for (let i = 0; i < points.length - 1; i++) {
+        const p0 = points[i - 1] || points[i];
+        const p1 = points[i];
+        const p2 = points[i + 1];
+        const p3 = points[i + 2] || p2;
+        const cp1x = p1[0] + (p2[0] - p0[0]) * alpha;
+        const cp1y = p1[1] + (p2[1] - p0[1]) * alpha;
+        const cp2x = p2[0] - (p3[0] - p1[0]) * alpha;
+        const cp2y = p2[1] - (p3[1] - p1[1]) * alpha;
+        d.push('C', cp1x, cp1y, cp2x, cp2y, p2[0], p2[1]);
+      }
+      return d.join(' ');
+    }
+
+    // -------------------------------
+    // Load market (backend or local)
+    // -------------------------------
+    async function loadMarket() {
+      try {
+        if (cfg.backendEnabled) { market = await fetchMarketBackend(); }
+        else { market = randomizeMarket(parseCSV(els.mockCsv.value)); }
+        renderMarketGrid(market);
+        setLastUpdateNow();
+      } catch {
+        market = randomizeMarket(parseCSV(els.mockCsv.value));
+        renderMarketGrid(market);
+        setLastUpdateNow();
+        toast(`Using local data. ${cfg.backendEnabled ? 'Backend fetch failed.' : 'Backend disabled.'}`);
+      }
+    }
+
+    // -------------------------------
+    // Events
+    // -------------------------------
+    document.getElementById('addRowBtn').addEventListener('click', (e) => { e.preventDefault(); newRow(); });
+    document.getElementById('loadSampleBtn').addEventListener('click', (e) => {
+      e.preventDefault(); clearPortfolio();
+      [{ symbol: 'TCS', qty: 5, avg: 4100 }, { symbol: 'HDFCBANK', qty: 12, avg: 1500 }, { symbol: 'ITC', qty: 20, avg: 430 }].forEach(newRow);
+    });
+    document.getElementById('clearPortfolioBtn').addEventListener('click', (e) => { e.preventDefault(); clearPortfolio(); });
+    document.getElementById('portfolioBody').addEventListener('click', (e) => {
+      if (e.target.classList.contains('removeRow')) { e.preventDefault(); e.target.closest('tr')?.remove(); }
+    });
+    document.getElementById('analyzeBtn').addEventListener('click', async (e) => {
+      e.preventDefault();
+      const portfolio = readPortfolio();
+      usage.portfolios += 1; saveUsage(usage);
+      if (cfg.backendEnabled) { postUsage('portfolio', 1, usage.prices.perPortfolio); }
+      try {
+        const result = cfg.backendEnabled ? await analyzeBackend(portfolio) : localAdviceEngine(portfolio, market);
+        showAdvice(result);
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      } catch {
+        toast('Analysis failed. Showing local advice.');
+        showAdvice(localAdviceEngine(portfolio, market));
+      }
+    });
+    els.refreshDataBtn.addEventListener('click', async (e) => { e.preventDefault(); await loadMarket(); });
+
+    els.pricingForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const perAdvice = Math.max(0, Number(els.priceAdvice.value || defaultPrices.perAdvice));
+      const perPortfolio = Math.max(0, Number(els.pricePortfolio.value || defaultPrices.perPortfolio));
+      usage.prices = { perAdvice, perPortfolio }; saveUsage(usage); toast('Prices updated.');
+    });
+
+    // Settings modal
+    els.settingsBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      els.backendEnabled.checked = cfg.backendEnabled;
+      els.apiBaseUrl.value = cfg.apiBaseUrl || '';
+      els.endpointMarket.value = cfg.endpoints.market || '/market';
+      els.endpointAnalyze.value = cfg.endpoints.analyze || '/analyze';
+      els.endpointUsage.value = cfg.endpoints.usage || '/usage';
+      els.endpointPing.value = cfg.endpoints.ping || '/health';
+      els.pingStatus.textContent = '';
+      els.settingsModal.classList.remove('hidden'); els.settingsModal.classList.add('flex');
+    });
+    els.closeSettings.addEventListener('click', (e) => {
+      e.preventDefault(); els.settingsModal.classList.add('hidden'); els.settingsModal.classList.remove('flex');
+    });
+    els.settingsForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      cfg.backendEnabled = els.backendEnabled.checked;
+      cfg.apiBaseUrl = (els.apiBaseUrl.value || '').trim();
+      cfg.endpoints = {
+        market: (els.endpointMarket.value || '/market').trim(),
+        analyze: (els.endpointAnalyze.value || '/analyze').trim(),
+        usage: (els.endpointUsage.value || '/usage').trim(),
+        ping: (els.endpointPing.value || '/health').trim(),
+      };
+      saveCfg(cfg); toast('Settings saved.');
+    });
+    els.pingBtn.addEventListener('click', async (e) => {
+      e.preventDefault(); els.pingStatus.textContent = 'Pinging...';
+      try { const res = await pingBackend(); els.pingStatus.textContent = res?.ok ? '✅ Backend reachable' : '⚠️ Unexpected response'; }
+      catch { els.pingStatus.textContent = '❌ Failed to reach backend'; }
+    });
+
+    // Portfolio helpers
+    function newRow(data = { symbol: '', qty: '', avg: '' }) {
+      const tr = document.createElement('tr');
+      tr.className = 'bg-white/5 rounded-xl';
+      tr.innerHTML = `
+        <td class="px-4 py-3">
+          <input type="text" placeholder="e.g., TCS" value="${data.symbol || ''}"
+                 class="w-32 md:w-40 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 uppercase tracking-wide" />
+        </td>
+        <td class="px-4 py-3">
+          <input type="number" min="0" step="1" placeholder="Qty" value="${data.qty || ''}"
+                 class="w-28 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-right" />
+        </td>
+        <td class="px-4 py-3">
+          <input type="number" min="0" step="0.01" placeholder="Avg price" value="${data.avg || ''}"
+                 class="w-32 bg-slate-900/60 border border-slate-700 rounded-lg px-3 py-2 text-right" />
+        </td>
+        <td class="px-4 py-3">
+          <button class="removeRow bg-rose-500/90 hover:bg-rose-400 text-slate-900 font-semibold px-3 py-2 rounded-lg">Remove</button>
+        </td>
+      `;
+      els.portfolioBody.appendChild(tr);
+    }
+    function clearPortfolio() { els.portfolioBody.innerHTML = ''; }
+    function readPortfolio() {
+      const rows = Array.from(els.portfolioBody.querySelectorAll('tr'));
+      return rows.map(r => {
+        const [symEl, qtyEl, avgEl] = r.querySelectorAll('input');
+        return { symbol: (symEl.value || '').trim().toUpperCase(), qty: Number(qtyEl.value), avg: Number(avgEl.value) };
+      }).filter(x => x.symbol && x.qty > 0 && x.avg >= 0);
+    }
+
+    // Chart events
+    els.chartSymbol.addEventListener('change', () => {
+      chartSymbol = els.chartSymbol.value || '';
+      if (!chartSymbol) { els.chart.innerHTML = ''; return; }
+      ensureSeriesFor(chartSymbol);
+      currentRange = '1M';
+      els.rangeBtns().forEach(b => b.classList.remove('bg-indigo-500','text-slate-900'));
+      const btn = document.querySelector('.rangeBtn[data-range="1M"]'); btn && btn.classList.add('bg-indigo-500','text-slate-900');
+      computeDomains(); drawChart();
+    });
+
+    els.rangeBtns().forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.preventDefault(); if (!fullDomain) return;
+        currentRange = btn.getAttribute('data-range');
+        els.rangeBtns().forEach(b => b.classList.remove('bg-indigo-500','text-slate-900'));
+        btn.classList.add('bg-indigo-500','text-slate-900');
+        viewDomain = rangeToDomain(currentRange, fullDomain);
+        drawChart();
+      });
+    });
+    // preselect 1M style
+    const defaultBtn = document.querySelector('.rangeBtn[data-range="1M"]');
+    defaultBtn && defaultBtn.classList.add('bg-indigo-500','text-slate-900');
+
+    els.smoothing.addEventListener('input', () => drawChart());
+    els.csvInput.addEventListener('change', async (e) => {
+      const f = e.target.files?.[0]; if (!f) return;
+      const text = await f.text();
+      const rows = text.trim().split(/\r?\n/);
+      const headers = rows[0].split(',').map(h=>h.trim().toLowerCase());
+      const si = headers.indexOf('symbol'), ti = headers.indexOf('timestamp'), pi = headers.indexOf('price');
+      if (si<0 || ti<0 || pi<0) { toast('CSV headers must be symbol,timestamp,price'); return; }
+      const map = {};
+      rows.slice(1).forEach(line => {
+        const cols = line.split(',').map(c=>c.trim());
+        const sym = (cols[si]||'').toUpperCase();
+        const t = new Date(cols[ti]); const p = Number(cols[pi]);
+        if (!sym || !isFinite(p) || isNaN(t.getTime())) return;
+        map[sym] = map[sym] || []; map[sym].push({ t, p });
+      });
+      Object.keys(map).forEach(k => map[k].sort((a,b)=>a.t-b.t));
+      Object.assign(chartSeries, map);
+      // repopulate symbol dropdown with union of market symbols and CSV symbols
+      const set = new Set([...(market||[]).map(s=>s.symbol), ...Object.keys(chartSeries)]);
+      els.chartSymbol.innerHTML = '<option value="">—</option>' + Array.from(set).map(s => `<option value="${s}">${s}</option>`).join('');
+      // auto-select first CSV symbol if nothing selected
+      if (!els.chartSymbol.value && Object.keys(map).length) {
+        const first = Object.keys(map)[0];
+        els.chartSymbol.value = first; chartSymbol = first;
+      } else { chartSymbol = els.chartSymbol.value || ''; }
+      computeDomains(); drawChart(); toast('CSV loaded into chart.');
+    });
+
+    // -------------------------------
+    // Init
+    // -------------------------------
+    async function init() {
+      renderMode(cfg);
+      // default one empty row for UX
+      newRow();
+      await loadMarket();
+    }
+    init();
+  </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'983370af113d47e2',t:'MTc1ODU2MTI4Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
